@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MotionLab</title>
+  <meta name="description" content="2D movement analysis for PE and biomechanics: joint angles and projectile motion from video.">
+  <meta name="theme-color" content="#0b1222">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MotionLab">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Trial list -->
+  <section id="home" class="screen">
+    <header class="bar">
+      <div class="brand"><img src="icons/icon-192.png" alt=""><h1>MotionLab</h1></div>
+      <div class="bar-actions">
+        <button id="help-button" class="text-button">Help</button>
+        <button id="select-button" class="text-button" hidden>Select</button>
+      </div>
+    </header>
+    <main class="home-main">
+      <div class="start-buttons" id="start-buttons">
+        <button id="record-button" class="big-button">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" class="fill"/></svg>
+          <span>Record video</span>
+        </button>
+        <label class="big-button">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/></svg>
+          <span>Import video</span>
+          <input id="import-input" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden>
+        </label>
+      </div>
+      <p id="import-status" class="status" hidden></p>
+      <h2 class="section-title">Trials</h2>
+      <ul id="trial-list" class="list"></ul>
+      <p id="empty-list" class="muted">No trials yet. Record or import a video to start.</p>
+      <p id="storage-note" class="footnote"></p>
+    </main>
+    <footer id="select-bar" class="bottom-bar" hidden>
+      <button id="select-all" class="text-button">Select All</button>
+      <button id="delete-selected" class="text-button danger" disabled>Delete (0)</button>
+    </footer>
+  </section>
+
+  <!-- Recorder -->
+  <section id="record" class="screen dark" hidden>
+    <video id="preview" playsinline muted autoplay></video>
+    <canvas id="grid" class="grid"></canvas>
+    <div class="record-top">
+      <button id="record-close" class="round-button" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="record-options">
+        <select id="record-fps" aria-label="Frame rate">
+          <option value="60">60 fps</option>
+          <option value="30">30 fps</option>
+          <option value="120">120 fps (if supported)</option>
+        </select>
+        <label class="pill"><input type="checkbox" id="grid-toggle" checked> Grid</label>
+      </div>
+    </div>
+    <div class="record-bottom">
+      <p id="record-info" class="pill-text">Starting camera…</p>
+      <p id="record-hint" class="hint">Film side-on to the movement, with the camera level and still and the whole movement in frame. Include an object of known length in the same plane for calibration.</p>
+      <div class="record-row">
+        <label class="text-button light">Use camera app
+          <input id="capture-input" type="file" accept="video/*" capture="environment" hidden>
+        </label>
+        <button id="shutter" class="shutter" aria-label="Start recording" disabled><span></span></button>
+        <span class="spacer-90"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Digitising -->
+  <section id="analysis" class="screen" hidden>
+    <header class="bar">
+      <button id="back-button" class="text-button back">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Trials
+      </button>
+      <h1 id="trial-title" class="trial-title"></h1>
+      <div class="bar-actions icons">
+        <button id="trim-button" class="icon-button" aria-label="Trim" title="Trim">
+          <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.5 7.5L20 18M8.5 16.5L20 6"/></svg>
+        </button>
+        <button id="auto-button" class="icon-button" aria-label="Automatic tracking" title="Automatic tracking">
+          <svg viewBox="0 0 24 24"><path d="M4 20L15 9M13 7l4 4"/><path d="M18 2v4M16 4h4M21 9v2M20 10h2M10 2v2M9 3h2" class="thin"/></svg>
+        </button>
+        <button id="calibrate-button" class="icon-button" aria-label="Calibrate" title="Calibrate">
+          <svg viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="1.5"/><path d="M6 8v3M10 8v4M14 8v3M18 8v4"/></svg>
+        </button>
+        <button id="results-button" class="icon-button" aria-label="Results" title="Results">
+          <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M6 15l4-5 4 3 6-7"/></svg>
+        </button>
+        <button id="settings-button" class="icon-button" aria-label="Trial settings" title="Trial settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+        </button>
+      </div>
+    </header>
+    <div id="stage" class="stage">
+      <canvas id="view"></canvas>
+      <p id="banner" class="banner"></p>
+      <button id="reset-zoom" class="pill-button" hidden>Reset zoom</button>
+      <div id="loading" class="loading">Loading video…</div>
+      <div id="auto-panel" class="auto-panel" hidden>
+        <p id="auto-status"></p>
+        <progress id="auto-progress" max="1" value="0"></progress>
+        <button id="auto-stop" class="text-button">Stop</button>
+      </div>
+    </div>
+    <div id="controls" class="controls">
+      <div class="step-row">
+        <button class="icon-button" data-step="-10" aria-label="Back 10 frames"><svg viewBox="0 0 24 24"><path d="M12 6l-7 6 7 6zM20 6l-7 6 7 6z" class="fill"/></svg></button>
+        <button class="icon-button" data-step="-1" aria-label="Previous frame"><svg viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M18 6l-9 6 9 6z" class="fill"/></svg></button>
+        <div class="frame-label"><span id="frame-text"></span><span id="time-text" class="muted"></span></div>
+        <button class="icon-button" data-step="1" aria-label="Next frame"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M6 6l9 6-9 6z" class="fill"/></svg></button>
+        <button class="icon-button" data-step="10" aria-label="Forward 10 frames"><svg viewBox="0 0 24 24"><path d="M12 6l7 6-7 6zM4 6l7 6-7 6z" class="fill"/></svg></button>
+      </div>
+      <input id="frame-slider" type="range" min="0" max="1" step="1" value="0" aria-label="Frame">
+      <div id="chips" class="chips"></div>
+      <div class="tap-row">
+        <div class="segmented" id="after-tap" role="radiogroup" aria-label="After a tap">
+          <button data-value="stay">Stay</button>
+          <button data-value="nextMarker" class="on">Next marker</button>
+          <button data-value="nextFrame">Next frame</button>
+        </div>
+        <button id="delete-point" class="icon-button danger" aria-label="Remove this point" title="Remove this point">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Dialogs -->
+  <dialog id="auto-dialog" class="sheet">
+    <h3>Automatic tracking</h3>
+    <p class="sheet-label">Body joints</p>
+    <button class="sheet-button" data-pose="1">Detect on this frame</button>
+    <button class="sheet-button" data-pose="50">Detect on the next 50 frames</button>
+    <button class="sheet-button" data-pose="all">Detect from here to the end</button>
+    <label class="row">Body side
+      <select id="body-side">
+        <option value="auto">Auto</option>
+        <option value="left">Left side</option>
+        <option value="right">Right side</option>
+      </select>
+    </label>
+    <p class="sheet-label">Follow one marker</p>
+    <button class="sheet-button" id="follow-button">Follow marker from this frame</button>
+    <label class="row">Object size
+      <select id="object-size">
+        <option value="0.03">Small object</option>
+        <option value="0.06" selected>Medium object</option>
+        <option value="0.12">Large object</option>
+      </select>
+    </label>
+    <label class="row"><span>Replace points placed by hand</span><input type="checkbox" id="replace-manual"></label>
+    <button class="sheet-button cancel" data-close>Cancel</button>
+  </dialog>
+
+  <dialog id="trim-dialog" class="sheet">
+    <h3>Trim</h3>
+    <p class="muted small">Analysis, stepping and automatic tracking stay within the trimmed frames. The video itself is kept whole.</p>
+    <button class="sheet-button" id="trim-start"></button>
+    <button class="sheet-button" id="trim-end"></button>
+    <button class="sheet-button danger" id="trim-clear">Show the whole video</button>
+    <button class="sheet-button cancel" data-close>Cancel</button>
+  </dialog>
+
+  <dialog id="calibration-dialog" class="sheet">
+    <h3>Reference length</h3>
+    <p class="muted small">Enter the real distance between the two points, in metres.</p>
+    <input id="calibration-length" type="text" inputmode="decimal" value="1.0" aria-label="Metres">
+    <div class="sheet-row">
+      <button class="sheet-button cancel" id="calibration-cancel">Cancel</button>
+      <button class="sheet-button primary" id="calibration-save">Save</button>
+    </div>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="sheet">
+    <h3 id="confirm-title"></h3>
+    <p class="muted small" id="confirm-message"></p>
+    <div class="sheet-row">
+      <button class="sheet-button cancel" data-close>Cancel</button>
+      <button class="sheet-button danger" id="confirm-ok">Delete</button>
+    </div>
+  </dialog>
+
+  <dialog id="settings-dialog" class="panel">
+    <header class="panel-bar"><h3>Trial settings</h3><button class="text-button strong" data-close>Done</button></header>
+    <div class="panel-body">
+      <div class="group">
+        <label class="row stacked">Name<input id="set-name" type="text"></label>
+      </div>
+      <div class="group">
+        <label class="row">Capture frame rate<span class="inline-input"><input id="set-fps" type="text" inputmode="decimal"> fps</span></label>
+      </div>
+      <p class="footnote">Time is frame number ÷ this rate. If the clip was filmed in slow motion, set this to the rate it was filmed at, for example 240.</p>
+      <p class="footnote" id="video-info"></p>
+      <h4>Markers to digitise</h4>
+      <div class="group" id="marker-toggles"></div>
+      <h4>Calibration</h4>
+      <div class="group" id="calibration-info"></div>
+      <p class="footnote">The bottom of the reference is the origin: heights are measured from it, and x increases to the right.</p>
+    </div>
+  </dialog>
+
+  <dialog id="results-dialog" class="panel">
+    <header class="panel-bar"><h3>Results</h3><button class="text-button strong" data-close>Done</button></header>
+    <div class="panel-body" id="results-body"></div>
+  </dialog>
+
+  <dialog id="help-dialog" class="panel">
+    <header class="panel-bar"><h3>How to use MotionLab</h3><button class="text-button strong" data-close>Done</button></header>
+    <div class="panel-body prose">
+      <ol>
+        <li><b>Film.</b> Set the camera side-on to the movement, level and still (a tripod helps), and as far away as practical: zoom in rather than standing close. Keep the whole movement in frame. Put a reference of known length, such as a 1 m stick, <b>in the same plane as the movement</b>, standing on the ground. For fast movements, film in slow motion with your phone's Camera app, then use <i>Import video</i>.</li>
+        <li><b>Calibrate.</b> Tap the ruler button, tap the bottom of the reference, then the top, and enter its length in metres.</li>
+        <li><b>Auto-track (optional).</b> Tap the wand button. <i>Detect</i> places the head, shoulder, elbow, wrist, hip, knee, ankle and toe. <i>Follow</i> tracks one marker, such as a ball, after you place it by hand on one frame. Automatically placed points have a white outline. Check them and tap to correct any that jump.</li>
+        <li><b>Digitise by hand.</b> Choose a marker below the video and tap where it is. With <i>Next marker</i> on, the app moves through the markers and then to the next frame. Pinch or use the mouse wheel to zoom, drag to move around. On a keyboard, ← and → step through frames.</li>
+        <li><b>Results.</b> The graph button shows angle–time graphs, projectile motion and a CSV export for Excel or Google Sheets.</li>
+      </ol>
+      <h4>Notes</h4>
+      <ul>
+        <li>All values are 2D projections onto the camera's view. Movement towards or away from the camera causes error.</li>
+        <li>Joint angles are <i>included</i> angles (180° = straight limb). Flexion = 180° − included angle for the knee, hip and elbow.</li>
+        <li>For projectile values, choose frames where the object is fully in the air. <i>Gravity from data</i> should be close to 9.81 m/s² when digitising and calibration are good.</li>
+        <li>For slow-motion clips, check <i>Capture frame rate</i> in Trial settings (the gear button) matches the rate it was filmed at.</li>
+      </ul>
+      <h4>Privacy</h4>
+      <p>Videos and results stay in this browser on this device. Nothing is uploaded. Clearing the browser's website data deletes them, so export the CSV of anything you want to keep. Automatic tracking uses Google's MediaPipe, which runs on the device but sends anonymous usage statistics (not images) to Google.</p>
+      <p class="footnote" id="version-note"></p>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
