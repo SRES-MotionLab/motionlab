@@ -1,6 +1,6 @@
 // Lets MotionLab open without an internet connection once it has been visited.
 // Change VERSION whenever the app's files change, so everyone gets the update.
-const VERSION = 'motionlab-1.1.0';
+const VERSION = 'motionlab-1.3.0';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/model.js', 'js/store.js', 'js/video.js', 'js/chart.js', 'js/pose.js', 'js/tracker.js',

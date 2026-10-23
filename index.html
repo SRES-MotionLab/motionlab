@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>MotionLab</title>
   <meta name="description" content="2D movement analysis for PE and biomechanics: joint angles and projectile motion from video.">
   <meta name="theme-color" content="#0b1222">
@@ -104,16 +104,18 @@
         </button>
       </div>
     </header>
-    <div id="stage" class="stage">
-      <canvas id="view"></canvas>
-      <p id="banner" class="banner"></p>
-      <button id="reset-zoom" class="pill-button" hidden>Reset zoom</button>
-      <div id="loading" class="loading">Loading video…</div>
+    <div id="info" class="info">
+      <p id="banner" class="banner" aria-live="polite"></p>
       <div id="auto-panel" class="auto-panel" hidden>
         <p id="auto-status"></p>
         <progress id="auto-progress" max="1" value="0"></progress>
         <button id="auto-stop" class="text-button">Stop</button>
       </div>
+    </div>
+    <div id="stage" class="stage">
+      <canvas id="view"></canvas>
+      <button id="reset-zoom" class="pill-button" hidden>Reset zoom</button>
+      <div id="loading" class="loading">Loading video…</div>
     </div>
     <div id="controls" class="controls">
       <div class="step-row">
@@ -229,7 +231,7 @@
         <li><b>Film.</b> Set the camera side-on to the movement, level and still (a tripod helps), and as far away as practical: zoom in rather than standing close. Keep the whole movement in frame. Put a reference of known length, such as a 1 m stick, <b>in the same plane as the movement</b>, standing on the ground. For fast movements, film in slow motion with your phone's Camera app, then use <i>Import video</i>.</li>
         <li><b>Calibrate.</b> Tap the ruler button, tap the bottom of the reference, then the top, and enter its length in metres.</li>
         <li><b>Auto-track (optional).</b> Tap the wand button. <i>Detect</i> places the head, shoulder, elbow, wrist, hip, knee, ankle and toe. <i>Follow</i> tracks one marker, such as a ball, after you place it by hand on one frame. Automatically placed points have a white outline. Check them and tap to correct any that jump.</li>
-        <li><b>Digitise by hand.</b> Choose a marker below the video and tap where it is. With <i>Next marker</i> on, the app moves through the markers and then to the next frame. Pinch or use the mouse wheel to zoom, drag to move around. On a keyboard, ← and → step through frames.</li>
+        <li><b>Digitise by hand.</b> Choose a marker below the video and tap where it is. To digitise a ball, tap <i>+ Ball</i>. With <i>Next marker</i> on, the app moves through the markers and then to the next frame. For accuracy on a phone or tablet, touch and hold: a magnifier appears, slide your finger until the crosshair is on the spot, then let go. Pinch or use the mouse wheel to zoom, drag to move around. On a keyboard, ← and → step through frames.</li>
         <li><b>Results.</b> The graph button shows angle–time graphs, projectile motion and a CSV export for Excel or Google Sheets.</li>
       </ol>
       <h4>Notes</h4>

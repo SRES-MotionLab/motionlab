@@ -3,7 +3,7 @@ import * as store from './store.js';
 import { FrameSource, probeMp4, tidyFPS } from './video.js';
 import { drawLineChart } from './chart.js';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.3.0';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (v, d) => (v == null || !Number.isFinite(v) ? '–' : v.toFixed(d));
@@ -24,10 +24,24 @@ function showScreen(id) {
 
 // Close buttons and backdrop taps for every dialog.
 for (const d of document.querySelectorAll('dialog')) {
+  const show = d.showModal.bind(d);
+  d.showModal = () => { d.openedAt = performance.now(); show(); };
   d.addEventListener('click', (e) => {
-    if (e.target === d || e.target.closest('[data-close]')) d.close();
+    if (e.target.closest('[data-close]')) { d.close(); return; }
+    if (e.target !== d || performance.now() - d.openedAt < 500) return;
+    // Only a tap outside the box counts as a backdrop tap, not one on the box's own padding.
+    const r = d.getBoundingClientRect();
+    const outside = e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+    if (outside && (e.clientX || e.clientY)) d.close();
   });
 }
+
+// Safari ignores the viewport's no-zoom setting, so block its pinch gestures directly.
+// Pinching on the video still zooms just the video, through the canvas's own handling.
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 
 // MARK: Routing
 
@@ -396,6 +410,14 @@ $('delete-point').onclick = () => {
   changed();
 };
 $('chips').onclick = (e) => {
+  const add = e.target.closest('[data-add]');
+  if (add?.dataset.add === 'ball') {
+    state.analysis.activeMarkers = M.MARKERS.filter((m) => m === 'ball' || state.analysis.activeMarkers.includes(m));
+    state.selected = 'ball';
+    changed();
+    return;
+  }
+  if (add) { $('settings-button').click(); return; }
   const chip = e.target.closest('[data-marker]');
   if (!chip) return;
   state.selected = chip.dataset.marker;
@@ -431,7 +453,9 @@ function renderControls() {
     const placed = M.point(a, m, state.frame) != null;
     const style = sel ? `background:${color}55;border-color:${color}` : '';
     return `<button class="chip" data-marker="${m}" style="${style}"><span class="dot" style="background:${color}"></span>${M.label(m)}${placed ? CHECK : ''}</button>`;
-  }).join('');
+  }).join('')
+    + (a.activeMarkers.includes('ball') ? '' : `<button class="chip add" data-add="ball"><span class="dot" style="background:${M.MARKER_COLORS.ball}"></span>+ Ball</button>`)
+    + '<button class="chip add" data-add="more">Markers…</button>';
   $('chips').querySelector('[style*="border-color"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   $('delete-point').disabled = M.point(a, state.selected, state.frame) == null;
 
@@ -546,6 +570,40 @@ function render() {
     }
   }
   for (const v of vs) dot(v, 5, '#ffd60a');
+  if (state.loupe) drawLoupe(state.loupe, t);
+}
+
+/** A magnified view of the video around the finger, drawn above it, with a crosshair on the exact spot. */
+function drawLoupe(v, t) {
+  const r = 56, mag = 3;
+  const w = view.clientWidth;
+  let cx = Math.min(Math.max(v[0], r + 4), w - r - 4);
+  let cy = v[1] - r - 48;
+  if (cy < r + 4) cy = v[1] + r + 48;
+  const p = t.toImage(v);
+  const scale = t.rect[2] / state.source.width; // view points per image pixel
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+  ctx.clip();
+  ctx.imageSmoothingEnabled = false;
+  const s = scale * mag;
+  ctx.translate(cx - p[0] * s, cy - p[1] * s);
+  ctx.drawImage(state.source.video, 0, 0, state.source.width * s, state.source.height * s);
+  ctx.restore();
+  ctx.save();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#fff';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = state.mode === 'calibrate' ? '#ffd60a' : M.MARKER_COLORS[state.selected];
+  ctx.beginPath();
+  ctx.moveTo(cx - 14, cy); ctx.lineTo(cx - 4, cy); ctx.moveTo(cx + 4, cy); ctx.lineTo(cx + 14, cy);
+  ctx.moveTo(cx, cy - 14); ctx.lineTo(cx, cy - 4); ctx.moveTo(cx, cy + 4); ctx.lineTo(cx, cy + 14);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // MARK: Touch, mouse and pen input
@@ -553,19 +611,31 @@ function render() {
 const pointers = new Map();
 let gesture = null;
 
+// Holding a finger still for a moment shows a magnifier, so points can be placed accurately on a phone.
+const HOLD_MS = 300;
+
 view.addEventListener('pointerdown', (e) => {
   view.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
   if (pointers.size === 1) {
-    gesture = { start: [e.offsetX, e.offsetY], pan0: [...state.pan], moved: false, multi: false };
+    gesture = { start: [e.offsetX, e.offsetY], pos: [e.offsetX, e.offsetY], pan0: [...state.pan], moved: false, multi: false, precise: false };
+    if (e.pointerType !== 'mouse' && !state.auto) {
+      const g = gesture;
+      g.timer = setTimeout(() => {
+        if (gesture === g && !g.moved && !g.multi) { g.precise = true; state.loupe = g.pos; render(); }
+      }, HOLD_MS);
+    }
   } else if (pointers.size === 2) {
+    clearTimeout(gesture?.timer);
+    state.loupe = null;
     const [p1, p2] = [...pointers.values()];
     gesture = {
-      ...gesture, multi: true,
+      ...gesture, multi: true, precise: false,
       d0: Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) || 1,
       mid0: [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2],
       z0: state.zoom, pan0: [...state.pan],
     };
+    render();
   }
 });
 
@@ -573,9 +643,17 @@ view.addEventListener('pointermove', (e) => {
   if (!pointers.has(e.pointerId) || !gesture) return;
   pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
   if (pointers.size === 1 && !gesture.multi) {
+    gesture.pos = [e.offsetX, e.offsetY];
+    if (gesture.precise) {
+      state.loupe = gesture.pos;
+      render();
+      return;
+    }
     const dx = e.offsetX - gesture.start[0], dy = e.offsetY - gesture.start[1];
-    if (!gesture.moved && Math.hypot(dx, dy) < 10) return;
+    // Fingers wobble, so a touch has to travel further than a mouse before it counts as a drag.
+    if (!gesture.moved && Math.hypot(dx, dy) < (e.pointerType === 'mouse' ? 6 : 14)) return;
     gesture.moved = true;
+    clearTimeout(gesture.timer);
     state.pan = [gesture.pan0[0] + dx, gesture.pan0[1] + dy];
     render();
   } else if (pointers.size >= 2) {
@@ -601,13 +679,25 @@ function endPointer(e) {
   if (!pointers.has(e.pointerId)) return;
   pointers.delete(e.pointerId);
   if (pointers.size === 0) {
-    if (e.type === 'pointerup' && gesture && !gesture.moved && !gesture.multi) handleTap([e.offsetX, e.offsetY]);
+    const g = gesture;
     gesture = null;
+    if (!g) return;
+    clearTimeout(g.timer);
+    if (g.precise) {
+      state.loupe = null;
+      if (e.type === 'pointerup') handleTap(g.pos); else render();
+    } else if (e.type === 'pointerup' && !g.moved && !g.multi) {
+      handleTap(g.start);
+    }
   } else if (pointers.size === 1 && gesture) {
     const [p] = [...pointers.values()];
-    gesture = { ...gesture, start: p, pan0: [...state.pan], moved: true };
+    gesture = { ...gesture, start: p, pos: p, pan0: [...state.pan], moved: true };
   }
 }
+// Stop the browser turning a tap on the video into a click a moment later. That late click would
+// land on whatever just opened (such as the calibration box) and close it straight away.
+view.addEventListener('touchend', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+view.addEventListener('contextmenu', (e) => e.preventDefault());
 view.addEventListener('pointerup', endPointer);
 view.addEventListener('pointercancel', endPointer);
 

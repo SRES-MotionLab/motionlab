@@ -94,6 +94,9 @@ export class FrameSource {
     this.video.setAttribute('playsinline', '');
     this.video.setAttribute('webkit-playsinline', '');
     this.video.src = this.url;
+    // Chrome on Android may not decode frames of a video that isn't on the page, so keep it there, invisibly.
+    Object.assign(this.video.style, { position: 'fixed', left: '0', top: '0', width: '2px', height: '2px', opacity: '0', pointerEvents: 'none', zIndex: '-1' });
+    document.body.append(this.video);
     this.fps = 30;
     this.frameCount = 1;
     this._target = null;
@@ -197,6 +200,7 @@ export class FrameSource {
   }
 
   close() {
+    this.video.remove();
     this.video.removeAttribute('src');
     this.video.load();
     URL.revokeObjectURL(this.url);
