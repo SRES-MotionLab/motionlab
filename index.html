@@ -204,6 +204,11 @@
       </div>
       <p class="footnote">Time is frame number ÷ this rate. If the clip was filmed in slow motion, set this to the rate it was filmed at, for example 240.</p>
       <p class="footnote" id="video-info"></p>
+      <h4>Smoothing</h4>
+      <div class="group">
+        <label class="row">Low-pass filter cut-off<span class="inline-input"><input id="set-smoothing" type="text" inputmode="decimal"> Hz</span></label>
+      </div>
+      <p class="footnote">0 = no smoothing (the default). A higher number keeps more detail and a lower number smooths more. Try 6–10 Hz for whole-body movements. It reduces digitising jitter in angles, graphs, projectile values and the CSV. Points on the video stay where they were placed.</p>
       <h4>Markers to digitise</h4>
       <div class="group" id="marker-toggles"></div>
       <h4>Calibration</h4>
@@ -233,6 +238,7 @@
         <li>Joint angles are <i>included</i> angles (180° = straight limb). Flexion = 180° − included angle for the knee, hip and elbow.</li>
         <li>For projectile values, choose frames where the object is fully in the air. <i>Gravity from data</i> should be close to 9.81 m/s² when digitising and calibration are good.</li>
         <li>For slow-motion clips, check <i>Capture frame rate</i> in Trial settings (the gear button) matches the rate it was filmed at.</li>
+        <li>To reduce jitter from digitising, set a smoothing cut-off in Trial settings or Results (0 = off). It uses a zero-lag 4th-order Butterworth low-pass filter on the positions.</li>
       </ul>
       <h4>Privacy</h4>
       <p>Videos and results stay in this browser on this device. Nothing is uploaded. Clearing the browser's website data deletes them, so export the CSV of anything you want to keep. Automatic tracking uses Google's MediaPipe, which runs on the device but sends anonymous usage statistics (not images) to Google.</p>

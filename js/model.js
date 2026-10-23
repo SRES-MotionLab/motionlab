@@ -34,6 +34,8 @@ export function newAnalysis({ name, videoId, videoFPS, captureFPS, frameCount, w
     points: {}, // marker -> { frame: [x, y] } in image pixels, origin top-left, y down
     autoTracked: {}, // marker -> { frame: true }
     bodySide: 'auto',
+    /** Low-pass filter cut-off in Hz applied to positions before analysis. 0 means no smoothing. */
+    smoothingHz: 0,
     trimStart: null,
     trimEnd: null,
   };
@@ -52,6 +54,7 @@ export function workingRange(a) {
 export const point = (a, marker, frame) => a.points[marker]?.[frame] ?? null;
 
 export function setPoint(a, p, marker, frame, isAuto = false) {
+  smoothCache.get(a)?.delete(marker);
   if (p) {
     (a.points[marker] ??= {})[frame] = [p[0], p[1]];
   } else if (a.points[marker]) {
@@ -74,9 +77,77 @@ export function metresPerPixel(c) {
   return px > 0 ? c.realLength / px : 0;
 }
 
-/** Position with y up: metres from the calibration origin when calibrated, otherwise pixels. */
+// MARK: Smoothing
+
+/**
+ * Zero-lag 4th-order Butterworth low-pass filter (a 2nd-order filter run forwards then backwards),
+ * with the cut-off corrected for the two passes as in Winter's Biomechanics and Motor Control of Human Movement.
+ */
+export function butterworth(values, cutoffHz, sampleHz) {
+  const n = values.length;
+  if (!(cutoffHz > 0) || !(sampleHz > 0) || n < 4) return values.slice();
+  const fc = Math.min(cutoffHz / 0.802, sampleHz * 0.49);
+  const wc = Math.tan(Math.PI * fc / sampleHz);
+  const k1 = Math.SQRT2 * wc, k2 = wc * wc;
+  const a0 = k2 / (1 + k1 + k2), a1 = 2 * a0, a2 = a0;
+  const k3 = 2 * a0 / k2;
+  const b1 = -2 * a0 + k3, b2 = 1 - 2 * a0 - k3;
+
+  // Pad each end with a point-reflected copy of the data so the filter doesn't pull the ends towards zero.
+  const pad = Math.min(n - 1, 20);
+  const x = [];
+  for (let i = pad; i >= 1; i--) x.push(2 * values[0] - values[i]);
+  x.push(...values);
+  for (let i = 1; i <= pad; i++) x.push(2 * values[n - 1] - values[n - 1 - i]);
+
+  const pass = (input) => {
+    const out = new Array(input.length);
+    out[0] = input[0];
+    out[1] = input[1];
+    for (let i = 2; i < input.length; i++) {
+      out[i] = a0 * input[i] + a1 * input[i - 1] + a2 * input[i - 2] + b1 * out[i - 1] + b2 * out[i - 2];
+    }
+    return out;
+  };
+  const forward = pass(x);
+  const backward = pass(forward.reverse()).reverse();
+  return backward.slice(pad, pad + n);
+}
+
+const smoothCache = new WeakMap(); // analysis -> Map(marker -> { key, points })
+
+/** Smoothed image points of one marker. Each unbroken run of digitised frames is filtered on its own. */
+function smoothedPoints(a, marker) {
+  const key = `${a.smoothingHz}|${a.captureFPS}`;
+  let byMarker = smoothCache.get(a);
+  if (!byMarker) smoothCache.set(a, (byMarker = new Map()));
+  const hit = byMarker.get(marker);
+  if (hit && hit.key === key) return hit.points;
+
+  const points = {};
+  const frames = trackedFramesFor(a, marker);
+  let start = 0;
+  for (let i = 1; i <= frames.length; i++) {
+    if (i < frames.length && frames[i] === frames[i - 1] + 1) continue;
+    const run = frames.slice(start, i);
+    const xs = butterworth(run.map((f) => a.points[marker][f][0]), a.smoothingHz, a.captureFPS);
+    const ys = butterworth(run.map((f) => a.points[marker][f][1]), a.smoothingHz, a.captureFPS);
+    run.forEach((f, j) => { points[f] = [xs[j], ys[j]]; });
+    start = i;
+  }
+  byMarker.set(marker, { key, points });
+  return points;
+}
+
+/** The point used for analysis: smoothed when a cut-off is set, otherwise as digitised. */
+export function analysedPoint(a, marker, frame) {
+  if (!(a.smoothingHz > 0)) return point(a, marker, frame);
+  return smoothedPoints(a, marker)[frame] ?? null;
+}
+
+/** Position with y up: metres from the calibration origin when calibrated, otherwise pixels. Smoothed if set. */
 export function position(a, marker, frame) {
-  const p = point(a, marker, frame);
+  const p = analysedPoint(a, marker, frame);
   if (!p) return null;
   const c = a.calibration;
   if (c) {

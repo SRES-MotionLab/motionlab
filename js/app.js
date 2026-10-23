@@ -3,7 +3,7 @@ import * as store from './store.js';
 import { FrameSource, probeMp4, tidyFPS } from './video.js';
 import { drawLineChart } from './chart.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (v, d) => (v == null || !Number.isFinite(v) ? '–' : v.toFixed(d));
@@ -846,6 +846,7 @@ $('settings-button').onclick = () => {
   const a = state.analysis, src = state.source;
   $('set-name').value = a.name;
   $('set-fps').value = String(a.captureFPS);
+  $('set-smoothing').value = String(a.smoothingHz ?? 0);
   $('video-info').textContent = `Video file: ${src.frameCount} frames, ${tidyFPS(a.videoFPS)} frames per second of playback, ${src.width}×${src.height}.`;
   $('marker-toggles').innerHTML = M.MARKERS.map((m) => `<label class="row"><span><span class="dot" style="background:${M.MARKER_COLORS[m]}"></span>${M.label(m)}</span>
     <input type="checkbox" data-toggle="${m}" ${a.activeMarkers.includes(m) ? 'checked' : ''}></label>`).join('');
@@ -868,6 +869,16 @@ $('set-name').oninput = (e) => { state.analysis.name = e.target.value || 'Trial'
 $('set-fps').onchange = (e) => {
   const v = parseFloat(e.target.value.replace(',', '.'));
   if (v > 0) { state.analysis.captureFPS = v; changed(); } else e.target.value = String(state.analysis.captureFPS);
+};
+/** Reads a smoothing cut-off from a text box. Returns null when it isn't a valid number. */
+function parseSmoothing(text) {
+  const v = parseFloat(String(text).replace(',', '.'));
+  return Number.isFinite(v) && v >= 0 ? v : null;
+}
+$('set-smoothing').onchange = (e) => {
+  const v = parseSmoothing(e.target.value);
+  if (v != null) { state.analysis.smoothingHz = v; changed(); }
+  e.target.value = String(state.analysis.smoothingHz ?? 0);
 };
 $('marker-toggles').onchange = (e) => {
   const m = e.target.dataset.toggle;
@@ -909,7 +920,16 @@ function renderResults() {
   const body = $('results-body');
   const angles = M.ANGLES.filter((d) => M.angleSeries(d, a).length);
   const markers = M.MARKERS.filter((m) => M.trackedFramesFor(a, m).length >= 3);
-  let html = '<h4>Joint angles</h4>';
+  const hz = a.smoothingHz ?? 0;
+  const nyquist = a.captureFPS / 2;
+  let html = `<h4>Smoothing</h4><div class="group">
+      <label class="row">Low-pass filter cut-off<span class="inline-input"><input id="res-smoothing" type="text" inputmode="decimal" value="${hz}"> Hz</span></label>
+    </div>
+    <p class="footnote">${hz > 0
+      ? `Positions are smoothed with a zero-lag Butterworth filter at ${hz} Hz before everything below is calculated. Set 0 to use the raw digitised points.`
+      : 'Off: everything below uses the raw digitised points. Try 6–10 Hz for whole-body movements to reduce digitising jitter.'}
+      ${hz >= nyquist ? ` This is above half the capture frame rate (${nyquist} Hz), so it has almost no effect.` : ''}</p>
+    <h4>Joint angles</h4>`;
 
   if (!angles.length) {
     html += '<div class="group"><div class="row muted">Digitise three connected markers on at least one frame (for example hip, knee and ankle) to see joint angles.</div></div>';
@@ -970,6 +990,11 @@ function renderResults() {
     requestAnimationFrame(() => drawLineChart($('angle-chart'), data.map((s) => ({ x: s.time, y: s.value })),
       { xLabel: 'Time (s)', yLabel: `${def.name} angle (°)`, color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() }));
   }
+  $('res-smoothing').addEventListener('change', (e) => {
+    const v = parseSmoothing(e.target.value);
+    if (v != null) { a.smoothingHz = v; changed(); }
+    renderResults();
+  });
   $('angle-select')?.addEventListener('change', (e) => { results.angle = e.target.value; renderResults(); });
   $('proj-marker')?.addEventListener('change', (e) => { results.marker = e.target.value; resetProjectileRange(); renderResults(); });
   const maxFrame = state.source.frameCount - 1;
